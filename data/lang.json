@@ -1,0 +1,36 @@
+{
+  "fr": {
+    "addItem": "Ajouter un article",
+    "cancel": "Annuler",
+    "total": "Total",
+    "table": "Table",
+    "order": "Commande en cours",
+    "language": "Langue",
+    "selectTable": "Sélectionnez une table",
+    "menu": "Menu",
+    "price": "Prix",
+    "orderSent": "Commande envoyée",
+    "connectionStatus": "Statut de connexion",
+    "connected": "Connecté",
+    "disconnected": "Déconnecté",
+    "connecting": "Connexion...",
+    "emptyOrder": "Aucun article dans la commande"
+  },
+  "th": {
+    "addItem": "เพิ่มรายการ",
+    "cancel": "ยกเลิก",
+    "total": "รวม",
+    "table": "โต๊ะ",
+    "order": "คำสั่งซื้อปัจจุบัน",
+    "language": "ภาษา",
+    "selectTable": "เลือกโต๊ะ",
+    "menu": "เมนู",
+    "price": "ราคา",
+    "orderSent": "ส่งคำสั่งซื้อแล้ว",
+    "connectionStatus": "สถานะการเชื่อมต่อ",
+    "connected": "เชื่อมต่อแล้ว",
+    "disconnected": "ตัดการเชื่อมต่อ",
+    "connecting": "กำลังเชื่อมต่อ...",
+    "emptyOrder": "ไม่มีรายการในคำสั่งซื้อ"
+  }
+} 
