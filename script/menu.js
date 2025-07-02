@@ -2,7 +2,7 @@
 export const menuItems = [
   {
     id: "cafe",
-    price: 50,
+    price: 40,
     name: {
       fr: "Café",
       th: "กาแฟ"
@@ -10,92 +10,52 @@ export const menuItems = [
   },
   {
     id: "tea",
-    price: 40,
+    price: 30,
     name: {
       fr: "Thé",
       th: "ชา"
     }
   },
   {
-    id: "cappuccino",
-    price: 70,
-    name: {
-      fr: "Cappuccino",
-      th: "คาปูชิโน"
-    }
-  },
-  {
-    id: "latte",
-    price: 80,
-    name: {
-      fr: "Latte",
-      th: "ลาเต้"
-    }
-  },
-  {
-    id: "orange_juice",
-    price: 60,
-    name: {
-      fr: "Jus d'orange",
-      th: "น้ำส้มคั้น"
-    }
-  },
-  {
     id: "water",
-    price: 20,
+    price: 10,
     name: {
       fr: "Eau",
       th: "น้ำ"
     }
   },
   {
-    id: "croissant",
-    price: 45,
+    id: "crepejambonfromageoeuf",
+    price: 100,
     name: {
-      fr: "Croissant",
-      th: "ครัวซองต์"
+      fr: "Crêpe jambon fromage oeuf",
+      th: "ครีบจะมันฟอร์จีโอฟ"
     }
   },
   {
-    id: "sandwich",
-    price: 120,
-    name: {
-      fr: "Sandwich",
-      th: "แซนด์วิช"
-    }
-  },
-  {
-    id: "salad",
-    price: 150,
-    name: {
-      fr: "Salade",
-      th: "สลัด"
-    }
-  },
-  {
-    id: "soup",
+    id: "crepechampignonfromageoeuf",
     price: 90,
     name: {
-      fr: "Soupe",
-      th: "ซุป"
+      fr: "Crêpe champignon fromage oeuf",
+      th: "ครีบชั่มฟอร์จีโอฟ"
     }
   },
   {
-    id: "pasta",
-    price: 180,
+    id: "crepesucree",
+    price: 50,
     name: {
-      fr: "Pâtes",
-      th: "พาสต้า"
+      fr: "Crêpe sucrée",
+      th: "ครีบสุกรี"
     }
   },
   {
-    id: "pizza",
-    price: 220,
+    id: "crepechocolatbannane",
+    price: 80,
     name: {
-      fr: "Pizza",
-      th: "พิซซ่า"
+      fr: "Crêpe chocolat banane",
+      th: "ครีบชอคโละบันนัน"
     }
-  }
+  },
 ];
 
 export const getMenuItemById = (id) => {

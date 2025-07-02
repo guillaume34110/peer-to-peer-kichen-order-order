@@ -8,7 +8,7 @@ const reconnectDelay = 3000;
 
 // Initialiser la connexion WebSocket
 export const initializeWebSocket = () => {
-  const host = window.location.hostname || 'localhost';
+  const host =  'localhost';
   const wsUrl = `ws://${host}:3000`;
   
   console.log(`Tentative de connexion à ${wsUrl}`);
