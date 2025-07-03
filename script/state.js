@@ -87,4 +87,15 @@ export const setConnectionStatus = (status) => {
 };
 
 // Obtenir l'état complet (pour debug)
-export const getFullState = () => State; 
+export const getFullState = () => State;
+
+// Obtenir les tables qui ont des commandes en cours
+export const getTablesWithOrders = () => {
+  const tablesWithOrders = new Set();
+  State.data.orders.forEach(order => {
+    if (order.table && order.items && order.items.length > 0) {
+      tablesWithOrders.add(order.table);
+    }
+  });
+  return Array.from(tablesWithOrders);
+}; 

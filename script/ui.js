@@ -1,6 +1,6 @@
 import { menuItems } from './menu.js';
 import { t, getCurrentLanguage, setLanguage } from './i18n.js';
-import { formatPrice } from './utils.js';
+import { formatPrice, getTableCount, setTableCount } from './utils.js';
 import { 
   initializeOrderForTable,
   updateStateFromServer,
@@ -8,7 +8,8 @@ import {
   getSelectedTable, 
   setSelectedTable, 
   getOrderTotal,
-  getConnectionStatus 
+  getConnectionStatus,
+  getTablesWithOrders
 } from './state.js';
 import { sendAddItem, sendRemoveItem, requestState } from './websocket.js';
 
@@ -21,6 +22,7 @@ export const initializeUI = () => {
   setupEventListeners();
   renderMenu();
   renderLanguageSelector();
+  updateTableDisplay(getTableCount());
   updateUI();
 };
 
@@ -32,8 +34,17 @@ const cacheElements = () => {
     orderList: document.getElementById('order-list'),
     orderTotal: document.getElementById('order-total'),
     languageSelector: document.getElementById('language-selector'),
-    connectionStatus: document.getElementById('connection-status'),
-    orderSection: document.getElementById('order-section')
+    orderSection: document.getElementById('order-section'),
+    tableCount: document.getElementById('table-count'),
+    decreaseTables: document.getElementById('decrease-tables'),
+    increaseTables: document.getElementById('increase-tables'),
+    menuCollapseBtn: document.getElementById('menu-collapse-btn'),
+    orderCollapseBtn: document.getElementById('order-collapse-btn'),
+    orderContent: document.getElementById('order-content'),
+    menuSection: document.querySelector('.menu-section'),
+    moneyGiven: document.getElementById('money-given'),
+    changeAmount: document.getElementById('change-amount'),
+    header: document.querySelector('.header')
   };
 };
 
@@ -53,6 +64,17 @@ const setupEventListeners = () => {
   
   // Changement de langue
   elements.languageSelector.addEventListener('change', handleLanguageChange);
+  
+  // Contrôles du nombre de tables
+  elements.decreaseTables.addEventListener('click', handleDecreaseTable);
+  elements.increaseTables.addEventListener('click', handleIncreaseTable);
+  
+  // Boutons de collapse
+  elements.menuCollapseBtn.addEventListener('click', handleMenuCollapse);
+  elements.orderCollapseBtn.addEventListener('click', handleOrderCollapse);
+  
+  // Calcul du rendu de monnaie
+  elements.moneyGiven.addEventListener('input', calculateChange);
 };
 
 // Gestion du changement de table
@@ -74,6 +96,51 @@ const handleLanguageChange = (event) => {
   const newLanguage = event.target.value;
   setLanguage(newLanguage);
   updateUI();
+};
+
+// Gestion des contrôles de table
+const handleDecreaseTable = () => {
+  const current = getTableCount();
+  const newCount = setTableCount(current - 1);
+  updateTableDisplay(newCount);
+};
+
+const handleIncreaseTable = () => {
+  const current = getTableCount();
+  const newCount = setTableCount(current + 1);
+  updateTableDisplay(newCount);
+};
+
+// Générer les options de table
+const generateTableOptions = (count) => {
+  const tablesWithOrders = getTablesWithOrders();
+  const options = ['<option value="">table</option>'];
+  
+  for (let i = 1; i <= count; i++) {
+    const hasOrder = tablesWithOrders.includes(i);
+    const tableText = `Table ${i}`;
+    
+    if (hasOrder) {
+      // Utiliser des espaces pour séparer le texte et l'indicateur
+      const spacing = '\u00A0'.repeat(2); // Espaces non-sécables
+      options.push(`<option value="${i}">${tableText}${spacing}🟢</option>`);
+    } else {
+      options.push(`<option value="${i}">${tableText}</option>`);
+    }
+  }
+  return options.join('');
+};
+
+// Mettre à jour l'affichage des tables
+const updateTableDisplay = (count) => {
+  const currentSelection = elements.tableSelect.value;
+  elements.tableCount.textContent = count;
+  elements.tableSelect.innerHTML = generateTableOptions(count);
+  
+  // Restaurer la sélection si elle est toujours valide
+  if (currentSelection && parseInt(currentSelection) <= count) {
+    elements.tableSelect.value = currentSelection;
+  }
 };
 
 // Gestion du statut de connexion
@@ -116,9 +183,11 @@ const handleWebSocketMessage = (event) => {
 // Rendu du menu en grille
 const renderMenu = () => {
   const menuHtml = menuItems.map(item => `
-    <div class="menu-item" data-item-id="${item.id}">
-      <div class="menu-item-name">${item.name[getCurrentLanguage()]}</div>
-      <div class="menu-item-price">${formatPrice(item.price)}</div>
+    <div class="menu-item" data-item-id="${item.id}" style="background-image: url('${item.image}');">
+      <div class="menu-item-price-badge">${formatPrice(item.price)}</div>
+      <div class="menu-item-name-band">
+        <span class="menu-item-name">${item.name[getCurrentLanguage()]}</span>
+      </div>
     </div>
   `).join('');
   
@@ -151,8 +220,6 @@ const handleMenuItemClick = (itemId) => {
     alert('Erreur de connexion - Impossible d\'ajouter l\'article');
   }
 };
-
-
 
 // Rendu de la commande actuelle
 const renderOrder = () => {
@@ -208,18 +275,22 @@ const handleCancelItem = (itemIndex) => {
 // Rendu du sélecteur de langue
 const renderLanguageSelector = () => {
   elements.languageSelector.innerHTML = `
-    <option value="fr" ${getCurrentLanguage() === 'fr' ? 'selected' : ''}>🇫🇷 Français</option>
-    <option value="th" ${getCurrentLanguage() === 'th' ? 'selected' : ''}>🇹🇭 ไทย</option>
+    <option value="fr" ${getCurrentLanguage() === 'fr' ? 'selected' : ''}>🇫🇷</option>
+    <option value="th" ${getCurrentLanguage() === 'th' ? 'selected' : ''}>🇹🇭</option>
   `;
 };
 
 // Mise à jour du statut de connexion
 const updateConnectionStatus = () => {
   const isConnected = getConnectionStatus();
-  const statusElement = elements.connectionStatus;
   
-  statusElement.className = `connection-status ${isConnected ? 'connected' : 'disconnected'}`;
-  statusElement.textContent = isConnected ? t('connected') : t('disconnected');
+  if (isConnected) {
+    elements.header.classList.remove('disconnected');
+    elements.header.classList.add('connected');
+  } else {
+    elements.header.classList.remove('connected');
+    elements.header.classList.add('disconnected');
+  }
 };
 
 // Notification visuelle pour les mises à jour d'état
@@ -266,20 +337,68 @@ const showStateUpdateNotification = (orderCount) => {
 // Mise à jour de l'affichage de la commande
 const updateOrderDisplay = () => {
   renderOrder();
+  // Mettre à jour aussi le sélecteur de tables pour les indicateurs
+  updateTableDisplay(getTableCount());
+  // Recalculer le rendu de monnaie
+  calculateChange();
 };
 
 // Mise à jour complète de l'interface
 export const updateUI = () => {
   // Mettre à jour les textes traduits
-  document.querySelector('[data-translate="table"]').textContent = t('table');
   document.querySelector('[data-translate="menu"]').textContent = t('menu');
   document.querySelector('[data-translate="order"]').textContent = t('order');
   document.querySelector('[data-translate="total"]').textContent = t('total');
-  document.querySelector('[data-translate="language"]').textContent = t('language');
-  document.querySelector('[data-translate="connectionStatus"]').textContent = t('connectionStatus');
   
   // Re-rendre le menu avec la nouvelle langue
   renderMenu();
   renderOrder();
   updateConnectionStatus();
+};
+
+// Gestion des contrôles de collapse
+const handleMenuCollapse = () => {
+  const isCollapsed = elements.menuGrid.classList.contains('collapsed');
+  
+  if (isCollapsed) {
+    elements.menuGrid.classList.remove('collapsed');
+    elements.menuSection.classList.remove('collapsed');
+    elements.menuCollapseBtn.textContent = '−';
+  } else {
+    elements.menuGrid.classList.add('collapsed');
+    elements.menuSection.classList.add('collapsed');
+    elements.menuCollapseBtn.textContent = '+';
+  }
+};
+
+const handleOrderCollapse = () => {
+  const isCollapsed = elements.orderContent.classList.contains('collapsed');
+  
+  if (isCollapsed) {
+    elements.orderContent.classList.remove('collapsed');
+    elements.orderSection.classList.remove('collapsed');
+    elements.orderCollapseBtn.textContent = '−';
+  } else {
+    elements.orderContent.classList.add('collapsed');
+    elements.orderSection.classList.add('collapsed');
+    elements.orderCollapseBtn.textContent = '+';
+  }
+};
+
+// Calcul du rendu de monnaie
+const calculateChange = () => {
+  const total = getOrderTotal();
+  const moneyGiven = parseFloat(elements.moneyGiven.value) || 0;
+  const change = moneyGiven - total;
+  
+  if (moneyGiven === 0) {
+    elements.changeAmount.textContent = 'Rendu: 0 ฿';
+    elements.changeAmount.style.color = '#666';
+  } else if (change >= 0) {
+    elements.changeAmount.textContent = `Rendu: ${formatPrice(change)}`;
+    elements.changeAmount.style.color = '#27ae60';
+  } else {
+    elements.changeAmount.textContent = `Manque: ${formatPrice(Math.abs(change))}`;
+    elements.changeAmount.style.color = '#e74c3c';
+  }
 }; 

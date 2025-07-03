@@ -6,7 +6,8 @@ export const menuItems = [
     name: {
       fr: "Café",
       th: "กาแฟ"
-    }
+    },
+    image: "https://picsum.photos/id/225/300/200"
   },
   {
     id: "tea",
@@ -14,7 +15,8 @@ export const menuItems = [
     name: {
       fr: "Thé",
       th: "ชา"
-    }
+    },
+    image: "https://picsum.photos/id/404/300/200"
   },
   {
     id: "water",
@@ -22,7 +24,8 @@ export const menuItems = [
     name: {
       fr: "Eau",
       th: "น้ำ"
-    }
+    },
+    image: "https://picsum.photos/id/30/300/200"
   },
   {
     id: "crepejambonfromageoeuf",
@@ -30,7 +33,8 @@ export const menuItems = [
     name: {
       fr: "Crêpe jambon fromage oeuf",
       th: "ครีบจะมันฟอร์จีโอฟ"
-    }
+    },
+    image: "https://picsum.photos/id/1080/300/200"
   },
   {
     id: "crepechampignonfromageoeuf",
@@ -38,7 +42,8 @@ export const menuItems = [
     name: {
       fr: "Crêpe champignon fromage oeuf",
       th: "ครีบชั่มฟอร์จีโอฟ"
-    }
+    },
+    image: "https://picsum.photos/id/211/300/200"
   },
   {
     id: "crepesucree",
@@ -46,7 +51,8 @@ export const menuItems = [
     name: {
       fr: "Crêpe sucrée",
       th: "ครีบสุกรี"
-    }
+    },
+    image: "https://picsum.photos/id/367/300/200"
   },
   {
     id: "crepechocolatbannane",
@@ -54,7 +60,8 @@ export const menuItems = [
     name: {
       fr: "Crêpe chocolat banane",
       th: "ครีบชอคโละบันนัน"
-    }
+    },
+    image: "https://picsum.photos/id/326/300/200"
   },
 ];
 
