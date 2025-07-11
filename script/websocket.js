@@ -43,9 +43,11 @@ export const initializeWebSocket = () => {
   };
   
   socket.onmessage = (event) => {
-    console.log('📥 Message reçu:', event.data);
+    console.log('📥 Message reçu (aperçu):', event.data.substring(0, 200) + '...');
     try {
+      console.log(`[${new Date().toISOString()}] --- LOG: WebSocket data received.`);
       const message = JSON.parse(event.data);
+      console.log(`[${new Date().toISOString()}] --- LOG: JSON data parsed.`);
       handleServerMessage(message);
     } catch (error) {
       console.error('❌ Erreur parsing message:', error);
@@ -66,7 +68,9 @@ export const sendAddItem = (table, item) => {
     item: {
       id: item.id,
       price: item.price,
-      name: item.name
+      name: item.name,
+      ingredients: item.ingredients || [],
+      supplements: item.supplements || []
     }
   };
   
@@ -89,7 +93,9 @@ export const sendRemoveItem = (table, item) => {
     item: {
       id: item.id,
       price: item.price,
-      name: item.name
+      name: item.name,
+      ingredients: item.ingredients || [],
+      supplements: item.supplements || []
     }
   };
   
@@ -98,20 +104,80 @@ export const sendRemoveItem = (table, item) => {
   return true;
 };
 
-// Envoyer une demande d'état
-export const requestState = () => {
+// Envoyer une modification d'item (nouvelle route)
+export const sendModifyItem = (originalTimestamp, item, removedIngredients, addedIngredients, supplements = []) => {
   if (!socket || socket.readyState !== WebSocket.OPEN) {
     console.error('❌ WebSocket non connecté');
     return false;
   }
   
   const message = {
-    action: "getState",
-    timestamp: getCurrentTimestamp()
+    action: "modify",
+    originalTimestamp: originalTimestamp,
+    timestamp: getCurrentTimestamp(),
+    item: {
+      id: item.id,
+      price: item.price,
+      name: item.name
+    },
+    ingredientsRemoved: removedIngredients || [],
+    ingredientsAdded: addedIngredients || [],
+    supplements: supplements
   };
   
   socket.send(JSON.stringify(message));
-  console.log('📤 Demande état:', message);
+  console.log('📤 Envoi modification:', message);
+  return true;
+};
+
+// Demander l'état complet au serveur
+export const requestState = () => {
+  if (!socket || socket.readyState !== WebSocket.OPEN) {
+    console.log('❌ Impossible de demander l\'état - WebSocket non connecté');
+    return false;
+  }
+  
+  const message = {
+    action: "getState",
+    timestamp: Date.now()
+  };
+  
+  socket.send(JSON.stringify(message));
+  console.log('🔄 Demande d\'état envoyée');
+  return true;
+};
+
+// Demander le menu au serveur
+export const requestMenu = () => {
+  if (!socket || socket.readyState !== WebSocket.OPEN) {
+    console.log('❌ Impossible de demander le menu - WebSocket non connecté');
+    return false;
+  }
+  
+  const message = {
+    action: "getMenu",
+    timestamp: Date.now()
+  };
+  
+  socket.send(JSON.stringify(message));
+  console.log('📋 Demande de menu envoyée');
+  return true;
+};
+
+// Demander la liste des ingrédients au serveur
+export const requestIngredients = () => {
+  if (!socket || socket.readyState !== WebSocket.OPEN) {
+    console.log('❌ Impossible de demander les ingrédients - WebSocket non connecté');
+    return false;
+  }
+  
+  const message = {
+    action: "getIngredients",
+    timestamp: Date.now()
+  };
+  
+  socket.send(JSON.stringify(message));
+  console.log('🥬 Demande d\'ingrédients envoyée');
   return true;
 };
 
@@ -137,10 +203,39 @@ const dispatchConnectionEvent = (status) => {
 const handleServerMessage = (message) => {
   console.log('📨 Traitement message serveur:', message);
   
+  // Gérer les erreurs
+  if (message.error) {
+    console.error('❌ Erreur serveur:', message.error);
+    const event = new CustomEvent('websocket-error', { detail: message.error });
+    window.dispatchEvent(event);
+    return;
+  }
+  
+  // Gérer la réponse du menu
+  if (message.menu && Array.isArray(message.menu)) {
+    console.log('📋 Menu reçu:', message.menu);
+    if (message.menu.length > 0) {
+      console.log('🖼️ Image base64 reçue (aperçu 1er item):', message.menu[0].image ? message.menu[0].image.substring(0, 70) + '...' : 'Pas d\'image');
+    }
+    console.log(`[${new Date().toISOString()}] --- LOG: Before dispatching 'websocket-menu-received' event.`);
+    const event = new CustomEvent('websocket-menu-received', { detail: message.menu });
+    window.dispatchEvent(event);
+    console.log(`[${new Date().toISOString()}] --- LOG: After dispatching 'websocket-menu-received' event.`);
+    return;
+  }
+  
+  // Gérer la réponse des ingrédients
+  if (message.ingredients && Array.isArray(message.ingredients)) {
+    console.log('🥬 Ingrédients reçus:', message.ingredients);
+    const event = new CustomEvent('websocket-ingredients-received', { detail: message.ingredients });
+    window.dispatchEvent(event);
+    return;
+  }
+  
   // Détecter les mises à jour d'état depuis la kitchen
   if (message.orders && Array.isArray(message.orders)) {
     console.log('📦 État mis à jour reçu:', message);
-    handleKitchenStateUpdate(message.orders);
+    handleKitchenStateUpdate(message);
   } else {
     // Autres types de messages
     const event = new CustomEvent('websocket-message', { detail: message });
@@ -149,11 +244,11 @@ const handleServerMessage = (message) => {
 };
 
 // Traiter les mises à jour d'état depuis la kitchen
-const handleKitchenStateUpdate = (orders) => {
-  console.log(`📊 Mise à jour: ${orders.length} commandes reçues`);
+const handleKitchenStateUpdate = (stateUpdate) => {
+  const tableInfo = stateUpdate.totalTables !== undefined ? `Configuration cuisine: ${stateUpdate.totalTables} tables.` : '';
+  console.log(`📊 Mise à jour: ${stateUpdate.orders.length} commandes reçues. ${tableInfo}`);
   
   // Dispatcher l'état complet vers l'UI
-  const stateData = { orders };
-  const event = new CustomEvent('websocket-state-update', { detail: stateData });
+  const event = new CustomEvent('websocket-state-update', { detail: stateUpdate });
   window.dispatchEvent(event);
 }; 

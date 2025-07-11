@@ -4,6 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Kitchen Sender - Prise de Commande</title>
+    
+    <!-- Polices Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700&display=swap" rel="stylesheet">
+
+    <!-- Styles -->
+    <link rel="stylesheet" href="styles/theme.css">
     <link rel="stylesheet" href="styles/main.css">
 </head>
 <body>
@@ -11,26 +19,15 @@
         <!-- Header avec contrôles -->
         <header class="header disconnected">
             <div class="header-controls">
-                <!-- Sélection de table -->
-                <div class="control-group">
-                    <div class="table-controls">
-                        <select id="table-select">
-                            <!-- Options générées dynamiquement -->
-                        </select>
-                        <div class="table-count-controls">
-                            <button id="decrease-tables" type="button">-</button>
-                            <span id="table-count">6</span>
-                            <button id="increase-tables" type="button">+</button>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Sélecteur de langue -->
-                <div class="control-group">
-                    <select id="language-selector">
-                        <!-- Options générées dynamiquement -->
+                <div class="table-selector">
+                    <select id="table-select">
+                        <option value="">table</option>
                     </select>
+                    <span id="table-count">6</span>
                 </div>
+                <select id="language-selector">
+                    <!-- Options générées dynamiquement -->
+                </select>
             </div>
         </header>
 

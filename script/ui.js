@@ -1,17 +1,21 @@
-import { menuItems } from './menu.js';
 import { t, getCurrentLanguage, setLanguage } from './i18n.js';
-import { formatPrice, getTableCount, setTableCount } from './utils.js';
+import { formatPrice, validateImageBase64 } from './utils.js';
 import { 
   initializeOrderForTable,
   updateStateFromServer,
+  updateMenuFromServer,
+  updateIngredientsFromServer,
   getCurrentOrder, 
   getSelectedTable, 
   setSelectedTable, 
   getOrderTotal,
   getConnectionStatus,
-  getTablesWithOrders
+  getTablesWithOrders,
+  getMenu,
+  getIngredients,
+  getTotalTables
 } from './state.js';
-import { sendAddItem, sendRemoveItem, requestState } from './websocket.js';
+import { sendAddItem, sendRemoveItem, sendModifyItem, requestState, requestMenu, requestIngredients } from './websocket.js';
 
 // Éléments DOM
 let elements = {};
@@ -20,9 +24,9 @@ let elements = {};
 export const initializeUI = () => {
   cacheElements();
   setupEventListeners();
-  renderMenu();
+  renderMenu(); // Affichera le message de chargement
   renderLanguageSelector();
-  updateTableDisplay(getTableCount());
+  updateTableDisplay(getTotalTables());
   updateUI();
 };
 
@@ -36,8 +40,6 @@ const cacheElements = () => {
     languageSelector: document.getElementById('language-selector'),
     orderSection: document.getElementById('order-section'),
     tableCount: document.getElementById('table-count'),
-    decreaseTables: document.getElementById('decrease-tables'),
-    increaseTables: document.getElementById('increase-tables'),
     menuCollapseBtn: document.getElementById('menu-collapse-btn'),
     orderCollapseBtn: document.getElementById('order-collapse-btn'),
     orderContent: document.getElementById('order-content'),
@@ -62,12 +64,17 @@ const setupEventListeners = () => {
   // Mise à jour d'état du WebSocket
   window.addEventListener('websocket-state-update', handleStateUpdate);
   
+  // Réception du menu du WebSocket
+  window.addEventListener('websocket-menu-received', handleMenuReceived);
+  
+  // Réception des ingrédients du WebSocket
+  window.addEventListener('websocket-ingredients-received', handleIngredientsReceived);
+  
+  // Gestion des erreurs WebSocket
+  window.addEventListener('websocket-error', handleWebSocketError);
+  
   // Changement de langue
   elements.languageSelector.addEventListener('change', handleLanguageChange);
-  
-  // Contrôles du nombre de tables
-  elements.decreaseTables.addEventListener('click', handleDecreaseTable);
-  elements.increaseTables.addEventListener('click', handleIncreaseTable);
   
   // Boutons de collapse
   elements.menuCollapseBtn.addEventListener('click', handleMenuCollapse);
@@ -96,19 +103,6 @@ const handleLanguageChange = (event) => {
   const newLanguage = event.target.value;
   setLanguage(newLanguage);
   updateUI();
-};
-
-// Gestion des contrôles de table
-const handleDecreaseTable = () => {
-  const current = getTableCount();
-  const newCount = setTableCount(current - 1);
-  updateTableDisplay(newCount);
-};
-
-const handleIncreaseTable = () => {
-  const current = getTableCount();
-  const newCount = setTableCount(current + 1);
-  updateTableDisplay(newCount);
 };
 
 // Générer les options de table
@@ -143,12 +137,51 @@ const updateTableDisplay = (count) => {
   }
 };
 
+// Gestion de la réception du menu
+const handleMenuReceived = (event) => {
+  console.log(`[${new Date().toISOString()}] --- LOG: UI received 'websocket-menu-received' event.`);
+  const menuItems = event.detail;
+  console.log('📋 Menu reçu dans UI:', menuItems);
+  
+  // Debug: vérifier les prix reçus
+  menuItems.forEach(item => {
+    console.log(`💰 Prix pour ${item.id}: ${item.price} (formaté: ${formatPrice(item.price)})`);
+  });
+  
+  // Mettre à jour le menu dans l'état
+  updateMenuFromServer(menuItems);
+  console.log(`[${new Date().toISOString()}] --- LOG: Menu updated in state.`);
+  
+  // Re-rendre le menu
+  renderMenu();
+};
+
+// Gestion de la réception des ingrédients
+const handleIngredientsReceived = (event) => {
+  const ingredientsList = event.detail;
+  console.log('🥬 Ingrédients reçus dans UI:', ingredientsList);
+  
+  // Mettre à jour les ingrédients dans l'état
+  updateIngredientsFromServer(ingredientsList);
+};
+
+// Gestion des erreurs WebSocket
+const handleWebSocketError = (event) => {
+  const errorMessage = event.detail;
+  console.error('❌ Erreur WebSocket reçue:', errorMessage);
+  
+  // Afficher l'erreur à l'utilisateur
+  alert(`Erreur: ${errorMessage}`);
+};
+
 // Gestion du statut de connexion
 const handleConnectionStatus = (event) => {
   updateConnectionStatus();
   
-  // Demander l'état initial lors de la connexion
+  // Demander le menu, les ingrédients et l'état initial lors de la connexion
   if (getConnectionStatus()) {
+    requestMenu();
+    requestIngredients();
     requestState();
   }
 };
@@ -162,11 +195,23 @@ const handleStateUpdate = (event) => {
   const orderCount = serverState.orders ? serverState.orders.length : 0;
   console.log(`📊 ${orderCount} commandes dans le nouvel état`);
   
+  // Debug: vérifier les modifications dans les items
+  if (serverState.orders) {
+    serverState.orders.forEach(order => {
+      if (order.items) {
+        order.items.forEach(item => {
+          console.log('🔍 Item reçu du serveur:', item.id, item);
+        });
+      }
+    });
+  }
+  
   // Mettre à jour l'état local
   updateStateFromServer(serverState);
   
   // Rafraîchir l'affichage
   updateOrderDisplay();
+  updateTableDisplay(getTotalTables());
   
   // Notification visuelle temporaire (optionnel)
   showStateUpdateNotification(orderCount);
@@ -182,14 +227,42 @@ const handleWebSocketMessage = (event) => {
 
 // Rendu du menu en grille
 const renderMenu = () => {
-  const menuHtml = menuItems.map(item => `
-    <div class="menu-item" data-item-id="${item.id}" style="background-image: url('${item.image}');">
-      <div class="menu-item-price-badge">${formatPrice(item.price)}</div>
-      <div class="menu-item-name-band">
-        <span class="menu-item-name">${item.name[getCurrentLanguage()]}</span>
+  console.log(`[${new Date().toISOString()}] --- LOG: Starting menu render.`);
+  const menu = getMenu();
+  
+  if (!menu || menu.length === 0) {
+    elements.menuGrid.innerHTML = '<div class="menu-loading">Chargement du menu...</div>';
+    return;
+  }
+  
+  const menuHtml = menu.map(item => {
+    // Debug: vérifier le prix utilisé pour le rendu
+    console.log(`🎨 Rendu - Prix pour ${item.id}: ${item.price} (formaté: ${formatPrice(item.price)})`);
+    
+    // Vérifier la disponibilité
+    const isAvailable = !item.quantity || item.quantity.infinite || item.quantity.amount > 0;
+    const itemClass = isAvailable ? 'menu-item' : 'menu-item menu-item-unavailable';
+    
+    // Générer la pastille de quantité si nécessaire
+    let quantityBadge = '';
+    if (item.quantity && !item.quantity.infinite) {
+      const badgeClass = item.quantity.amount <= 5 ? 'menu-item-quantity-badge low-stock' : 'menu-item-quantity-badge';
+      quantityBadge = `<div class="${badgeClass}">${item.quantity.amount}</div>`;
+    }
+    
+    // L'image est maintenant directement en base64, on valide et utilise l'image
+    console.log(`🖼️ Traitement de l'image pour ${item.id}:`, item.image ? item.image.substring(0, 70) + '...' : 'Pas d\'image');
+    const validatedImage = validateImageBase64(item.image);
+    return `
+      <div class="${itemClass}" data-item-id="${item.id}" data-available="${isAvailable}" style="background-image: url('${validatedImage}');">
+        <div class="menu-item-price-badge">${formatPrice(item.price)}</div>
+        ${quantityBadge}
+        <div class="menu-item-name-band">
+          <span class="menu-item-name">${item.name[getCurrentLanguage()]}</span>
+        </div>
       </div>
-    </div>
-  `).join('');
+    `;
+  }).join('');
   
   elements.menuGrid.innerHTML = menuHtml;
   
@@ -197,24 +270,52 @@ const renderMenu = () => {
   elements.menuGrid.querySelectorAll('.menu-item').forEach(itemElement => {
     itemElement.addEventListener('click', () => {
       const itemId = itemElement.dataset.itemId;
-      handleMenuItemClick(itemId);
+      const isAvailable = itemElement.dataset.available === 'true';
+      
+      if (isAvailable) {
+        handleMenuItemClick(itemId);
+      } else {
+        alert('Cet article n\'est plus disponible');
+      }
     });
   });
 };
 
 // Gestion du clic sur un item du menu
-const handleMenuItemClick = (itemId) => {
+const handleMenuItemClick = (itemId, selectedSupplements = []) => {
   const tableNumber = getSelectedTable();
   if (!tableNumber) {
     alert(t('selectTable'));
     return;
   }
   
-  const menuItem = menuItems.find(item => item.id === itemId);
+  const menuItem = getMenu().find(item => item.id === itemId);
   if (!menuItem) return;
   
+  // Clonage profond pour éviter la mutation du menu
+  const itemToAdd = JSON.parse(JSON.stringify(menuItem));
+
+  // Appliquer les suppléments sélectionnés (si fournis)
+  itemToAdd.supplements = selectedSupplements;
+  let supplementTotal = 0;
+  if (selectedSupplements && selectedSupplements.length > 0 && menuItem.supplements) {
+    supplementTotal = selectedSupplements.reduce((sum, suppId) => {
+      const supp = menuItem.supplements.find(s => s.id === suppId);
+      return sum + (supp ? supp.price : 0);
+    }, 0);
+  }
+  itemToAdd.price = menuItem.price + supplementTotal;
+  
+  console.log('🛒 Envoi item avec suppléments:', {
+    id: itemId,
+    basePrice: menuItem.price,
+    supplements: selectedSupplements,
+    supplementTotal,
+    finalPrice: itemToAdd.price
+  });
+  
   // Envoyer au serveur WebSocket - il renverra l'état complet
-  const success = sendAddItem(tableNumber, menuItem);
+  const success = sendAddItem(tableNumber, itemToAdd);
   
   if (!success) {
     alert('Erreur de connexion - Impossible d\'ajouter l\'article');
@@ -231,28 +332,137 @@ const renderOrder = () => {
     return;
   }
   
-  const orderHtml = currentOrder.items.map((item, index) => `
-    <div class="order-item">
-      <div class="order-item-info">
-        <span class="order-item-name">${item.name[getCurrentLanguage()]}</span>
-        <span class="order-item-price">${formatPrice(item.price)}</span>
+  const orderHtml = currentOrder.items.map((item, index) => {
+    const modifications = getItemModifications(item);
+    const hasModifications = modifications.removed.length > 0 || modifications.added.length > 0 || modifications.supplements.length > 0;
+    
+    // Debug: afficher si des modifications sont détectées
+    if (hasModifications) {
+      console.log('🎯 Item avec modifications:', item.id, modifications);
+    }
+    
+    return `
+      <div class="order-item">
+        <div class="order-item-main">
+          <div class="order-item-info">
+            <span class="order-item-name">${item.name[getCurrentLanguage()]}</span>
+            <span class="order-item-price">${formatPrice(item.price)}</span>
+          </div>
+          <div class="order-item-actions">
+            <button class="edit-item-btn" data-item-index="${index}" title="Modifier les ingrédients">
+              ✏️
+            </button>
+            <button class="cancel-item-btn" data-item-index="${index}">
+              ${t('cancel')}
+            </button>
+          </div>
+        </div>
+        ${hasModifications ? `
+          <div class="item-modifications">
+            ${modifications.removed.length > 0 ? `
+              <div class="modification-group">
+                <span class="modification-label">${t('removed')}:</span>
+                <div class="modification-tags">
+                  ${modifications.removed.map(ingredient => `
+                    <span class="modification-tag removed">${ingredient}</span>
+                  `).join('')}
+                </div>
+              </div>
+            ` : ''}
+            ${modifications.added.length > 0 ? `
+              <div class="modification-group">
+                <span class="modification-label">${t('added')}:</span>
+                <div class="modification-tags">
+                  ${modifications.added.map(ingredient => `
+                    <span class="modification-tag added">${ingredient}</span>
+                  `).join('')}
+                </div>
+              </div>
+            ` : ''}
+            ${modifications.supplements.length > 0 ? `
+              <div class="modification-group">
+                <span class="modification-label">Suppléments:</span>
+                <div class="modification-tags">
+                  ${modifications.supplements.map(supplement => `
+                    <span class="modification-tag supplement">${supplement.name}${supplement.price ? ` (+${formatPrice(supplement.price)})` : ''}</span>
+                  `).join('')}
+                </div>
+              </div>
+            ` : ''}
+            ${modifications.supplementPrice > 0 ? `
+              <div class="modification-group">
+                <span class="modification-label">Total suppléments:</span>
+                <div class="modification-tags">
+                  <span class="modification-tag supplement">+${formatPrice(modifications.supplementPrice)}</span>
+                </div>
+              </div>
+            ` : ''}
+          </div>
+        ` : ''}
       </div>
-      <button class="cancel-item-btn" data-item-index="${index}">
-        ${t('cancel')}
-      </button>
-    </div>
-  `).join('');
+    `;
+  }).join('');
   
   elements.orderList.innerHTML = orderHtml;
   elements.orderTotal.textContent = formatPrice(getOrderTotal());
   
-  // Ajouter les événements d'annulation
+  // Ajouter les événements d'annulation et d'édition
   elements.orderList.querySelectorAll('.cancel-item-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       const itemIndex = parseInt(btn.dataset.itemIndex);
       handleCancelItem(itemIndex);
     });
   });
+  
+  elements.orderList.querySelectorAll('.edit-item-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const itemIndex = parseInt(btn.dataset.itemIndex);
+      handleEditItem(itemIndex);
+    });
+  });
+};
+
+// Obtenir les modifications d'un item
+const getItemModifications = (item) => {
+  const removed = item.ingredientsRemoved || item.removedIngredients || [];
+  const added = item.ingredientsAdded || item.addedIngredients || [];
+
+  // Debug: afficher les modifications trouvées
+  if (removed.length > 0 || added.length > 0 || item.supplementPrice > 0) {
+    console.log('🔍 Modifications trouvées pour', item.id, ':', { removed, added, supplementPrice: item.supplementPrice });
+  }
+
+  // Récupérer les informations des suppléments depuis le menu original
+  const menuItem = getMenu().find(menuItem => menuItem.id === item.id);
+  const supplements = [];
+
+  if (item.supplements && Array.isArray(item.supplements) && item.supplements.length > 0 && menuItem && menuItem.supplements) {
+    item.supplements.forEach(supplementId => {
+      const supplement = menuItem.supplements.find(s => s.id === supplementId);
+      if (supplement) {
+        supplements.push({
+          name: supplement.name || supplement.id,
+          price: supplement.price || 0
+        });
+      }
+    });
+  }
+
+  // Calculer le prix total des suppléments en fonction du nombre d'ingrédients ajoutés
+  const supplementTotal = (item.supplementPrice || 0) * (added.length || 0);
+
+  return {
+    removed: removed.map(id => {
+      const ingredient = getIngredients().find(ing => ing.id === id);
+      return ingredient ? ingredient.name[getCurrentLanguage()] : id;
+    }),
+    added: added.map(id => {
+      const ingredient = getIngredients().find(ing => ing.id === id);
+      return ingredient ? ingredient.name[getCurrentLanguage()] : id;
+    }),
+    supplements,
+    supplementPrice: supplementTotal
+  };
 };
 
 // Gestion de l'annulation d'un item
@@ -270,6 +480,15 @@ const handleCancelItem = (itemIndex) => {
       alert('Erreur de connexion - Impossible d\'annuler l\'article');
     }
   }
+};
+
+// Gestion de l'édition d'un item
+const handleEditItem = (itemIndex) => {
+  const currentOrder = getCurrentOrder();
+  if (!currentOrder || !currentOrder.items || !currentOrder.items[itemIndex]) return;
+  
+  const item = currentOrder.items[itemIndex];
+  showIngredientEditor(item, itemIndex);
 };
 
 // Rendu du sélecteur de langue
@@ -334,11 +553,49 @@ const showStateUpdateNotification = (orderCount) => {
   }, 2000);
 };
 
+// Notification de succès pour les modifications
+const showModificationSuccessNotification = () => {
+  const notification = document.createElement('div');
+  notification.className = 'modification-success-notification';
+  notification.style.cssText = `
+    position: fixed;
+    top: 80px;
+    right: 20px;
+    background: #27ae60;
+    color: white;
+    padding: 10px 15px;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    z-index: 1000;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
+  `;
+  notification.textContent = '✅ Modification enregistrée';
+  
+  document.body.appendChild(notification);
+  
+  // Animation d'apparition
+  setTimeout(() => {
+    notification.style.opacity = '1';
+  }, 100);
+  
+  // Suppression automatique
+  setTimeout(() => {
+    notification.style.opacity = '0';
+    setTimeout(() => {
+      if (document.body.contains(notification)) {
+        document.body.removeChild(notification);
+      }
+    }, 300);
+  }, 2000);
+};
+
 // Mise à jour de l'affichage de la commande
 const updateOrderDisplay = () => {
   renderOrder();
   // Mettre à jour aussi le sélecteur de tables pour les indicateurs
-  updateTableDisplay(getTableCount());
+  updateTableDisplay(getTotalTables());
   // Recalculer le rendu de monnaie
   calculateChange();
 };
@@ -354,6 +611,60 @@ export const updateUI = () => {
   renderMenu();
   renderOrder();
   updateConnectionStatus();
+};
+
+// Fonction de test temporaire pour simuler des modifications
+export const testModifications = () => {
+  const currentOrder = getCurrentOrder();
+  if (!currentOrder || !currentOrder.items || currentOrder.items.length === 0) {
+    console.log('❌ Aucun item à tester');
+    return;
+  }
+  
+  // Ajouter des modifications de test au premier item
+  const testItem = currentOrder.items[0];
+  testItem.ingredientsRemoved = ['fromage', 'jambon'];
+  testItem.ingredientsAdded = ['champignons', 'poulet'];
+  
+  console.log('🧪 Test modifications ajoutées à:', testItem.id);
+  console.log('Modifications:', { removed: testItem.ingredientsRemoved, added: testItem.ingredientsAdded });
+  
+  // Re-rendre la commande pour voir les modifications
+  renderOrder();
+  
+  // Ouvrir l'éditeur pour voir les modifications dans la popup
+  setTimeout(() => {
+    handleEditItem(0);
+  }, 1000);
+};
+
+// Fonction de test simple pour ajouter un article avec suppléments
+export const testAddWithSupplements = () => {
+  console.log('🧪 Test ajout avec suppléments');
+  handleMenuItemClick('cafe', ['sugar', 'milk']);
+};
+
+// Fonction de test pour ouvrir l'éditeur avec des modifications
+export const testEditorWithModifications = () => {
+  const currentOrder = getCurrentOrder();
+  if (!currentOrder || !currentOrder.items || currentOrder.items.length === 0) {
+    console.log('❌ Aucun item à tester');
+    return;
+  }
+  
+  // Créer un item de test avec des modifications
+  const testItem = {
+    ...currentOrder.items[0],
+    ingredients: ['farine', 'oeufs', 'lait', 'fromage', 'jambon'],
+    ingredientsRemoved: ['fromage', 'jambon'],
+    ingredientsAdded: ['champignons', 'poulet']
+  };
+  
+  console.log('🧪 Test éditeur avec modifications:', testItem);
+  
+  // Remplacer temporairement l'item et ouvrir l'éditeur
+  currentOrder.items[0] = testItem;
+  handleEditItem(0);
 };
 
 // Gestion des contrôles de collapse
@@ -382,6 +693,255 @@ const handleOrderCollapse = () => {
     elements.orderContent.classList.add('collapsed');
     elements.orderSection.classList.add('collapsed');
     elements.orderCollapseBtn.textContent = '+';
+  }
+};
+
+// Afficher l'éditeur d'ingrédients
+const showIngredientEditor = (item, itemIndex) => {
+  const ingredients = getIngredients();
+  const originalIngredients = item.ingredients || [];
+  // Récupérer les modifications existantes (support des deux formats)
+  const removedIngredients = item.ingredientsRemoved || item.removedIngredients || [];
+  const addedIngredients = item.ingredientsAdded || item.addedIngredients || [];
+  
+  // Debug: afficher les modifications trouvées
+  console.log('🔍 Éditeur - Item:', item.id);
+  console.log('🔍 Éditeur - Ingrédients originaux:', originalIngredients);
+  console.log('🔍 Éditeur - Ingrédients retirés:', removedIngredients);
+  console.log('🔍 Éditeur - Ingrédients ajoutés:', addedIngredients);
+  
+  // Créer la modal
+  const modal = document.createElement('div');
+  modal.className = 'ingredient-editor-modal';
+  modal.innerHTML = `
+    <div class="ingredient-editor-content">
+      <div class="ingredient-editor-header">
+        <h3>${t('editTitle')} ${item.name[getCurrentLanguage()]}</h3>
+        <button class="close-editor-btn">✕</button>
+      </div>
+      
+      <div class="ingredient-sections">
+        <div class="ingredient-section">
+          <h4>${t('originalIngredients')}</h4>
+          <div class="original-ingredients">
+            ${originalIngredients.map(ingredientId => {
+              const ingredient = ingredients.find(ing => ing.id === ingredientId);
+              const isRemoved = removedIngredients.includes(ingredientId);
+              return `
+                <label class="ingredient-checkbox ${isRemoved ? 'removed' : ''}">
+                  <input type="checkbox" 
+                         data-ingredient-id="${ingredientId}" 
+                         ${!isRemoved ? 'checked' : ''} 
+                         class="original-ingredient-checkbox">
+                  <span>${ingredient ? ingredient.name[getCurrentLanguage()] : ingredientId}</span>
+                </label>
+              `;
+            }).join('')}
+          </div>
+        </div>
+        
+        <div class="ingredient-section">
+          <h4>${t('addIngredients')}</h4>
+          <div class="add-ingredient-controls">
+            <select class="add-ingredient-select">
+              <option value="">${t('selectIngredient')}</option>
+              ${ingredients
+                .filter(ing => !originalIngredients.includes(ing.id) && !addedIngredients.includes(ing.id))
+                .map(ing => `<option value="${ing.id}">${ing.name[getCurrentLanguage()]}</option>`)
+                .join('')}
+            </select>
+            <button class="add-ingredient-btn">${t('add')}</button>
+          </div>
+          <div class="added-ingredients">
+            ${addedIngredients.map(ingredientId => {
+              const ingredient = ingredients.find(ing => ing.id === ingredientId);
+              return `
+                <div class="added-ingredient-tag">
+                  <span>${ingredient ? ingredient.name[getCurrentLanguage()] : ingredientId}</span>
+                  <button class="remove-added-ingredient" data-ingredient-id="${ingredientId}">✕</button>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      </div>
+      
+      <div class="ingredient-editor-actions">
+        <button class="save-modifications-btn">${t('save')}</button>
+        <button class="cancel-modifications-btn">${t('cancelMod')}</button>
+      </div>
+    </div>
+  `;
+  
+  document.body.appendChild(modal);
+  
+  // Gestionnaires d'événements
+  const closeBtn = modal.querySelector('.close-editor-btn');
+  const cancelBtn = modal.querySelector('.cancel-modifications-btn');
+  const saveBtn = modal.querySelector('.save-modifications-btn');
+  const addBtn = modal.querySelector('.add-ingredient-btn');
+  const addSelect = modal.querySelector('.add-ingredient-select');
+  const originalCheckboxes = modal.querySelectorAll('.original-ingredient-checkbox');
+  
+  // Fermer la modal
+  const closeModal = () => {
+    document.body.removeChild(modal);
+  };
+  
+  closeBtn.addEventListener('click', closeModal);
+  cancelBtn.addEventListener('click', closeModal);
+  
+  // Gestion des ingrédients originaux (retrait)
+  originalCheckboxes.forEach(checkbox => {
+    checkbox.addEventListener('change', () => {
+      const label = checkbox.closest('.ingredient-checkbox');
+      if (checkbox.checked) {
+        label.classList.remove('removed');
+      } else {
+        label.classList.add('removed');
+      }
+    });
+  });
+  
+  // Ajouter un ingrédient
+  addBtn.addEventListener('click', () => {
+    const selectedId = addSelect.value;
+    if (!selectedId) return;
+    
+    const ingredient = ingredients.find(ing => ing.id === selectedId);
+    const addedContainer = modal.querySelector('.added-ingredients');
+    
+    const newTag = document.createElement('div');
+    newTag.className = 'added-ingredient-tag';
+    newTag.innerHTML = `
+      <span>${ingredient ? ingredient.name[getCurrentLanguage()] : selectedId}</span>
+      <button class="remove-added-ingredient" data-ingredient-id="${selectedId}">✕</button>
+    `;
+    
+    addedContainer.appendChild(newTag);
+    addSelect.value = '';
+    
+    // Mettre à jour les options disponibles
+    updateAddIngredientOptions(modal);
+  });
+  
+  // Supprimer un ingrédient ajouté
+  modal.addEventListener('click', (e) => {
+    if (e.target.classList.contains('remove-added-ingredient')) {
+      e.target.closest('.added-ingredient-tag').remove();
+      updateAddIngredientOptions(modal);
+    }
+  });
+  
+  // Sauvegarder les modifications
+  saveBtn.addEventListener('click', () => {
+    const removedIngredients = [];
+    const addedIngredients = [];
+    
+    // Collecter les ingrédients retirés
+    originalCheckboxes.forEach(checkbox => {
+      if (!checkbox.checked) {
+        removedIngredients.push(checkbox.dataset.ingredientId);
+      }
+    });
+    
+    // Collecter les ingrédients ajoutés
+    modal.querySelectorAll('.added-ingredient-tag').forEach(tag => {
+      const ingredientId = tag.querySelector('.remove-added-ingredient').dataset.ingredientId;
+      addedIngredients.push(ingredientId);
+    });
+    
+    // Désactiver le bouton pendant l'envoi
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Envoi...';
+    
+    // Mettre à jour l'item
+    updateItemIngredients(itemIndex, removedIngredients, addedIngredients);
+    
+    // Fermer la modal après un court délai pour permettre l'envoi
+    setTimeout(() => {
+      closeModal();
+      showModificationSuccessNotification();
+    }, 500);
+  });
+  
+  // Mettre à jour les options d'ajout d'ingrédients
+  updateAddIngredientOptions(modal);
+};
+
+// Mettre à jour les options d'ajout d'ingrédients
+const updateAddIngredientOptions = (modal) => {
+  const ingredients = getIngredients();
+  const originalIngredients = Array.from(modal.querySelectorAll('.original-ingredient-checkbox'))
+    .map(cb => cb.dataset.ingredientId);
+  const addedIngredients = Array.from(modal.querySelectorAll('.added-ingredient-tag'))
+    .map(tag => tag.querySelector('.remove-added-ingredient').dataset.ingredientId);
+  
+  const select = modal.querySelector('.add-ingredient-select');
+  const availableIngredients = ingredients.filter(ing => 
+    !originalIngredients.includes(ing.id) && !addedIngredients.includes(ing.id)
+  );
+  
+  select.innerHTML = `
+    <option value="">${t('selectIngredient')}</option>
+    ${availableIngredients.map(ing => `<option value="${ing.id}">${ing.name[getCurrentLanguage()]}</option>`).join('')}
+  `;
+};
+
+// Récupérer le timestamp original d'un item
+const getOriginalTimestamp = (item, order) => {
+  // Priorité 1: timestamp de l'item lui-même
+  if (item.timestamp) {
+    return item.timestamp;
+  }
+  
+  // Priorité 2: timestamp de la commande
+  if (order.timestamp) {
+    return order.timestamp;
+  }
+  
+  // Priorité 3: orderId de la commande (si c'est un timestamp)
+  if (order.orderId) {
+    const timestampFromOrderId = parseInt(order.orderId.split('_')[1]);
+    if (!isNaN(timestampFromOrderId)) {
+      return timestampFromOrderId;
+    }
+  }
+  
+  return null;
+};
+
+// Mettre à jour les ingrédients d'un item
+const updateItemIngredients = (itemIndex, removedIngredients, addedIngredients) => {
+  const currentOrder = getCurrentOrder();
+  
+  if (!currentOrder || !currentOrder.items || !currentOrder.items[itemIndex]) return;
+  
+  const item = currentOrder.items[itemIndex];
+  
+  // Récupérer le timestamp original de l'item
+  const originalTimestamp = getOriginalTimestamp(item, currentOrder);
+  
+  if (!originalTimestamp) {
+    console.error('❌ Impossible de trouver le timestamp original pour la modification');
+    console.log('Item:', item);
+    console.log('Order:', currentOrder);
+    alert('Erreur - Impossible de modifier cet article (timestamp manquant)');
+    return;
+  }
+  
+  console.log('🔧 Modification de l\'item:', {
+    itemId: item.id,
+    originalTimestamp,
+    removedIngredients,
+    addedIngredients
+  });
+  
+  // Envoyer la modification au serveur
+  const success = sendModifyItem(originalTimestamp, item, removedIngredients, addedIngredients);
+  
+  if (!success) {
+    alert('Erreur de connexion - Impossible de modifier l\'article');
   }
 };
 

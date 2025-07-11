@@ -14,7 +14,16 @@
     "connected": "🟢",
     "disconnected": "🔴",
     "connecting": "Connexion...",
-    "emptyOrder": "Aucun article dans la commande"
+    "emptyOrder": "Aucun article dans la commande",
+    "added": "Ajouté",
+    "removed": "Retiré",
+    "editTitle": "Modifier",
+    "originalIngredients": "Ingrédients originaux",
+    "addIngredients": "Ajouter des ingrédients",
+    "add": "Ajouter",
+    "save": "Enregistrer",
+    "cancelMod": "Annuler",
+    "selectIngredient": "Sélectionner un ingrédient..."
   },
   "th": {
     "addItem": "เพิ่มรายการ",
@@ -31,6 +40,15 @@
     "connected": "🟢",
     "disconnected": "🔴",
     "connecting": "กำลังเชื่อมต่อ...",
-    "emptyOrder": "ไม่มีรายการในคำสั่งซื้อ"
+    "emptyOrder": "ไม่มีรายการในคำสั่งซื้อ",
+    "added": "เพิ่ม",
+    "removed": "เอาออก",
+    "editTitle": "แก้ไข",
+    "originalIngredients": "ส่วนผสมดั้งเดิม",
+    "addIngredients": "เพิ่มส่วนผสม",
+    "add": "เพิ่ม",
+    "save": "บันทึก",
+    "cancelMod": "ยกเลิก",
+    "selectIngredient": "เลือกส่วนผสม..."
   }
 } 
