@@ -7,7 +7,7 @@ const maxReconnectAttempts = 5;
 const reconnectDelay = 3000;
 
 // URL fixe pour le tunnel localtunnel
-const WS_URL = 'wss://kitchen-ws.loca.lt';
+const WS_URL = 'ws://guillaume.local:3000';
 
 // Initialiser la connexion WebSocket
 export const initializeWebSocket = () => {

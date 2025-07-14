@@ -46,7 +46,8 @@ const cacheElements = () => {
     menuSection: document.querySelector('.menu-section'),
     moneyGiven: document.getElementById('money-given'),
     changeAmount: document.getElementById('change-amount'),
-    header: document.querySelector('.header')
+    header: document.querySelector('.header'),
+    categoryFilter: document.getElementById('category-filter')
   };
 };
 
@@ -82,6 +83,9 @@ const setupEventListeners = () => {
   
   // Calcul du rendu de monnaie
   elements.moneyGiven.addEventListener('input', calculateChange);
+  
+  // Filtrage par catégorie
+  elements.categoryFilter.addEventListener('change', handleCategoryChange);
 };
 
 // Gestion du changement de table
@@ -137,6 +141,35 @@ const updateTableDisplay = (count) => {
   }
 };
 
+// Générer les options de catégories
+const generateCategoryOptions = () => {
+  const menu = getMenu();
+  const categories = new Map();
+  
+  // Option "Toutes les catégories"
+  categories.set('all', { id: 'all', name: { fr: 'Toutes les catégories', th: 'ทุกหมวดหมู่' } });
+  
+  // Extraire les catégories uniques du menu
+  menu.forEach(item => {
+    if (item.category && item.category.id) {
+      categories.set(item.category.id, item.category);
+    }
+  });
+  
+  // Générer les options HTML
+  const options = Array.from(categories.values()).map(category => {
+    return `<option value="${category.id}">${category.name[getCurrentLanguage()]}</option>`;
+  });
+  
+  // Mettre à jour le sélecteur
+  elements.categoryFilter.innerHTML = options.join('');
+};
+
+// Gestion du changement de catégorie
+const handleCategoryChange = () => {
+  renderMenu();
+};
+
 // Gestion de la réception du menu
 const handleMenuReceived = (event) => {
   console.log(`[${new Date().toISOString()}] --- LOG: UI received 'websocket-menu-received' event.`);
@@ -151,6 +184,9 @@ const handleMenuReceived = (event) => {
   // Mettre à jour le menu dans l'état
   updateMenuFromServer(menuItems);
   console.log(`[${new Date().toISOString()}] --- LOG: Menu updated in state.`);
+  
+  // Générer les options de catégories
+  generateCategoryOptions();
   
   // Re-rendre le menu
   renderMenu();
@@ -235,7 +271,13 @@ const renderMenu = () => {
     return;
   }
   
-  const menuHtml = menu.map(item => {
+  // Filtrer par catégorie sélectionnée
+  const selectedCategory = elements.categoryFilter ? elements.categoryFilter.value : 'all';
+  const filteredMenu = selectedCategory === 'all' 
+    ? menu 
+    : menu.filter(item => item.category && item.category.id === selectedCategory);
+  
+  const menuHtml = filteredMenu.map(item => {
     // Debug: vérifier le prix utilisé pour le rendu
     console.log(`🎨 Rendu - Prix pour ${item.id}: ${item.price} (formaté: ${formatPrice(item.price)})`);
     
@@ -264,7 +306,9 @@ const renderMenu = () => {
     `;
   }).join('');
   
-  elements.menuGrid.innerHTML = menuHtml;
+  elements.menuGrid.innerHTML = filteredMenu.length > 0 
+    ? menuHtml 
+    : `<div class="menu-loading">${t('noCategoryItems')}</div>`;
   
   // Ajouter les événements de clic
   elements.menuGrid.querySelectorAll('.menu-item').forEach(itemElement => {
@@ -317,7 +361,10 @@ const handleMenuItemClick = (itemId, selectedSupplements = []) => {
   // Envoyer au serveur WebSocket - il renverra l'état complet
   const success = sendAddItem(tableNumber, itemToAdd);
   
-  if (!success) {
+  if (success) {
+    // Demander la mise à jour du menu pour refléter les nouvelles quantités
+    requestMenu();
+  } else {
     alert('Erreur de connexion - Impossible d\'ajouter l\'article');
   }
 };
@@ -476,7 +523,10 @@ const handleCancelItem = (itemIndex) => {
     // Envoyer la demande d'annulation au serveur - il renverra l'état complet
     const success = sendRemoveItem(tableNumber, itemToRemove);
     
-    if (!success) {
+    if (success) {
+      // Demander la mise à jour du menu pour refléter les nouvelles quantités
+      requestMenu();
+    } else {
       alert('Erreur de connexion - Impossible d\'annuler l\'article');
     }
   }
@@ -484,11 +534,26 @@ const handleCancelItem = (itemIndex) => {
 
 // Gestion de l'édition d'un item
 const handleEditItem = (itemIndex) => {
-  const currentOrder = getCurrentOrder();
-  if (!currentOrder || !currentOrder.items || !currentOrder.items[itemIndex]) return;
-  
-  const item = currentOrder.items[itemIndex];
-  showIngredientEditor(item, itemIndex);
+  // Obtenir l'objet de commande agrégé pour trouver l'item sur lequel on a cliqué
+  const aggregatedOrder = getCurrentOrder(); 
+  if (!aggregatedOrder || !aggregatedOrder.items[itemIndex]) return;
+  const clickedItem = aggregatedOrder.items[itemIndex];
+
+  // Obtenir la commande parente spécifique en utilisant l'index
+  const parentOrder = getCurrentOrder(itemIndex);
+  if (!parentOrder) return;
+
+  // L'item original n'a pas la propriété 'parentOrder', nous le trouvons dans la commande parente
+  // Ceci est nécessaire car `showIngredientEditor` a besoin de l'objet item original.
+  const originalItem = parentOrder.items.find(item => 
+    item.id === clickedItem.id && (!item.timestamp || item.timestamp === clickedItem.timestamp)
+  );
+
+  if (originalItem) {
+    showIngredientEditor(originalItem, parentOrder);
+  } else {
+    console.error("Impossible de retrouver l'item original dans la commande parente.");
+  }
 };
 
 // Rendu du sélecteur de langue
@@ -607,65 +672,16 @@ export const updateUI = () => {
   document.querySelector('[data-translate="order"]').textContent = t('order');
   document.querySelector('[data-translate="total"]').textContent = t('total');
   
+  // Mettre à jour les options de catégories avec la nouvelle langue
+  generateCategoryOptions();
+  
   // Re-rendre le menu avec la nouvelle langue
   renderMenu();
   renderOrder();
   updateConnectionStatus();
 };
 
-// Fonction de test temporaire pour simuler des modifications
-export const testModifications = () => {
-  const currentOrder = getCurrentOrder();
-  if (!currentOrder || !currentOrder.items || currentOrder.items.length === 0) {
-    console.log('❌ Aucun item à tester');
-    return;
-  }
-  
-  // Ajouter des modifications de test au premier item
-  const testItem = currentOrder.items[0];
-  testItem.ingredientsRemoved = ['fromage', 'jambon'];
-  testItem.ingredientsAdded = ['champignons', 'poulet'];
-  
-  console.log('🧪 Test modifications ajoutées à:', testItem.id);
-  console.log('Modifications:', { removed: testItem.ingredientsRemoved, added: testItem.ingredientsAdded });
-  
-  // Re-rendre la commande pour voir les modifications
-  renderOrder();
-  
-  // Ouvrir l'éditeur pour voir les modifications dans la popup
-  setTimeout(() => {
-    handleEditItem(0);
-  }, 1000);
-};
 
-// Fonction de test simple pour ajouter un article avec suppléments
-export const testAddWithSupplements = () => {
-  console.log('🧪 Test ajout avec suppléments');
-  handleMenuItemClick('cafe', ['sugar', 'milk']);
-};
-
-// Fonction de test pour ouvrir l'éditeur avec des modifications
-export const testEditorWithModifications = () => {
-  const currentOrder = getCurrentOrder();
-  if (!currentOrder || !currentOrder.items || currentOrder.items.length === 0) {
-    console.log('❌ Aucun item à tester');
-    return;
-  }
-  
-  // Créer un item de test avec des modifications
-  const testItem = {
-    ...currentOrder.items[0],
-    ingredients: ['farine', 'oeufs', 'lait', 'fromage', 'jambon'],
-    ingredientsRemoved: ['fromage', 'jambon'],
-    ingredientsAdded: ['champignons', 'poulet']
-  };
-  
-  console.log('🧪 Test éditeur avec modifications:', testItem);
-  
-  // Remplacer temporairement l'item et ouvrir l'éditeur
-  currentOrder.items[0] = testItem;
-  handleEditItem(0);
-};
 
 // Gestion des contrôles de collapse
 const handleMenuCollapse = () => {
@@ -697,7 +713,7 @@ const handleOrderCollapse = () => {
 };
 
 // Afficher l'éditeur d'ingrédients
-const showIngredientEditor = (item, itemIndex) => {
+const showIngredientEditor = (item, order) => {
   const ingredients = getIngredients();
   const originalIngredients = item.ingredients || [];
   // Récupérer les modifications existantes (support des deux formats)
@@ -856,7 +872,7 @@ const showIngredientEditor = (item, itemIndex) => {
     saveBtn.textContent = 'Envoi...';
     
     // Mettre à jour l'item
-    updateItemIngredients(itemIndex, removedIngredients, addedIngredients);
+    updateItemIngredients(item, order, removedIngredients, addedIngredients);
     
     // Fermer la modal après un court délai pour permettre l'envoi
     setTimeout(() => {
@@ -912,37 +928,17 @@ const getOriginalTimestamp = (item, order) => {
 };
 
 // Mettre à jour les ingrédients d'un item
-const updateItemIngredients = (itemIndex, removedIngredients, addedIngredients) => {
-  const currentOrder = getCurrentOrder();
-  
-  if (!currentOrder || !currentOrder.items || !currentOrder.items[itemIndex]) return;
-  
-  const item = currentOrder.items[itemIndex];
-  
-  // Récupérer le timestamp original de l'item
-  const originalTimestamp = getOriginalTimestamp(item, currentOrder);
-  
+const updateItemIngredients = (item, order, removedIngredients, addedIngredients) => {
+  const originalTimestamp = order.timestamp || (order.orderId ? order.orderId.split('_')[1] : null);
+
   if (!originalTimestamp) {
     console.error('❌ Impossible de trouver le timestamp original pour la modification');
-    console.log('Item:', item);
-    console.log('Order:', currentOrder);
     alert('Erreur - Impossible de modifier cet article (timestamp manquant)');
     return;
   }
   
-  console.log('🔧 Modification de l\'item:', {
-    itemId: item.id,
-    originalTimestamp,
-    removedIngredients,
-    addedIngredients
-  });
-  
   // Envoyer la modification au serveur
-  const success = sendModifyItem(originalTimestamp, item, removedIngredients, addedIngredients);
-  
-  if (!success) {
-    alert('Erreur de connexion - Impossible de modifier l\'article');
-  }
+  sendModifyItem(originalTimestamp, item, removedIngredients, addedIngredients);
 };
 
 // Calcul du rendu de monnaie

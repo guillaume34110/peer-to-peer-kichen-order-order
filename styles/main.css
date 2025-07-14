@@ -111,6 +111,7 @@ select:focus, input:focus {
   transition: height 0.3s ease;
   flex: 1;
   min-height: 200px;
+  padding-bottom: 40px;
 }
 
 .menu-section.collapsed {
@@ -150,6 +151,31 @@ select:focus, input:focus {
   background: rgba(255, 255, 255, 0.2);
 }
 
+.category-filter {
+  padding: 15px 20px 0;
+  display: flex;
+  justify-content: center;
+}
+
+.category-selector {
+  width: 100%;
+  max-width: 300px;
+  padding: 10px 15px;
+  border-radius: var(--border-radius-small);
+  background: var(--effect-glass-bg);
+  border: var(--border-glass);
+  color: var(--color-white-ice);
+  font-size: 1rem;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.category-selector:focus {
+  box-shadow: 0 0 10px var(--effect-glow);
+  border-color: var(--color-blue-vibrant);
+}
+
 .menu-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
@@ -179,7 +205,7 @@ select:focus, input:focus {
   height: 150px;
   border-radius: var(--border-radius);
   background: hsla(0,0%,100%,.2);
-  border: 1px solid hsla(0,0%,100%,.4);
+  border: 1px solid var(--color-blue-vibrant);
   background-size: cover;
   background-position: center;
   display: flex;

@@ -1,7 +1,7 @@
 // Application principale - Point d'entrée
 import { loadTranslations } from './i18n.js';
-import { initializeUI, testModifications, testEditorWithModifications } from './ui.js';
-import { initializeWebSocket, requestState } from './websocket.js';
+import { initializeUI} from './ui.js';
+import { initializeWebSocket, requestState, requestMenu, requestIngredients } from './websocket.js';
 import { getConnectionStatus } from './state.js';
 
 // Initialisation de l'application
@@ -21,23 +21,17 @@ const initializeApp = async () => {
     console.log('🔌 Connexion au serveur WebSocket...');
     initializeWebSocket();
     
-    // Attendre un peu pour que la connexion s'établisse puis demander l'état
-    setTimeout(() => {
-      if (getConnectionStatus()) {
-        console.log('📊 Demande de l\'état initial...');
+    // Écouter l'état de la connexion pour demander les données
+    window.addEventListener('websocket-status', (event) => {
+      if (event.detail === 'connected') {
+        console.log('📊 Demande de l\'état initial, du menu et des ingrédients...');
         requestState();
+        requestMenu();
+        requestIngredients();
       }
-    }, 1000);
+    });
     
-    console.log('✅ Application initialisée avec succès');
-    
-    // Exposer les fonctions de test pour debug
-    window.testModifications = testModifications;
-    window.testEditorWithModifications = testEditorWithModifications;
-    console.log('🧪 Fonctions de test disponibles:');
-    console.log('  - testModifications() : Ajouter des modifications et ouvrir l\'éditeur');
-    console.log('  - testEditorWithModifications() : Ouvrir l\'éditeur avec des modifications existantes');
-    
+  
   } catch (error) {
     console.error('❌ Erreur lors de l\'initialisation de l\'application:', error);
     

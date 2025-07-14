@@ -1,16 +1,15 @@
 import { generateOrderId } from './utils.js';
-import { getItemFromLocalStorage, setItemInLocalStorage } from './utils.js';
 
-// État global, initialisé avec les données du localStorage si disponibles
+// État global
 const State = {
   data: {
-    orders: getItemFromLocalStorage('orders') || []
+    orders: []
   },
   selectedTable: null,
   isConnected: false,
-  menu: getItemFromLocalStorage('menu') || [],
-  ingredients: getItemFromLocalStorage('ingredients') || [],
-  totalTables: getItemFromLocalStorage('totalTables') || 8
+  menu: [],
+  ingredients: [],
+  totalTables: 8
 };
 
 // Initialiser une nouvelle commande pour une table
@@ -21,11 +20,9 @@ export const initializeOrderForTable = (tableNumber) => {
 // Mettre à jour l'état complet depuis le serveur
 export const updateStateFromServer = (serverState) => {
   State.data.orders = serverState.orders;
-  setItemInLocalStorage('orders', State.data.orders);
 
   if (serverState.totalTables !== undefined) {
     State.totalTables = serverState.totalTables;
-    setItemInLocalStorage('totalTables', State.totalTables);
   }
 };
 
@@ -33,15 +30,13 @@ export const updateStateFromServer = (serverState) => {
 export const updateMenuFromServer = (menuItems) => {
   // On fige chaque item pour éviter toute mutation accidentelle
   State.menu = menuItems.map(item => Object.freeze({ ...item }));
-  setItemInLocalStorage('menu', State.menu);
-  console.log('📋 Menu mis à jour et sauvegardé dans le localStorage.');
+  console.log('📋 Menu mis à jour.');
 };
 
 // Mettre à jour les ingrédients depuis le serveur
 export const updateIngredientsFromServer = (ingredientsList) => {
   State.ingredients = ingredientsList;
-  setItemInLocalStorage('ingredients', State.ingredients);
-  console.log('🥬 Ingrédients mis à jour et sauvegardés dans le localStorage.');
+  console.log('🥬 Ingrédients mis à jour.');
 };
 
 // Obtenir le menu
@@ -57,40 +52,32 @@ export const getTotalTables = () => State.totalTables;
 export const getAllOrders = () => State.data.orders;
 
 // Obtenir la commande pour la table sélectionnée
-export const getCurrentOrder = () => {
+export const getCurrentOrder = (itemIndex) => {
   if (!State.selectedTable) return null;
   
-  // Filtrer tous les orders pour cette table et agréger les items
   const tableOrders = State.data.orders.filter(order => order.table === State.selectedTable);
   
   if (tableOrders.length === 0) {
-    return {
-      orderId: null,
-      table: State.selectedTable,
-      items: []
-    };
+    return { orderId: null, table: State.selectedTable, items: [] };
   }
-  
-  // Si un seul order pour cette table, le retourner directement
-  if (tableOrders.length === 1) {
-    return tableOrders[0];
-  }
-  
-  // Si plusieurs orders, agréger tous les items
-  const allItems = [];
-  let orderId = tableOrders[0].orderId; // Prendre le premier orderId
-  
-  tableOrders.forEach(order => {
-    if (order.items && Array.isArray(order.items)) {
-      allItems.push(...order.items);
-    } else if (order.item) {
-      // Si format avec un seul item par order
-      allItems.push(order.item);
+
+  // Aplatir tous les articles de toutes les commandes pour cette table
+  const allItems = tableOrders.flatMap(order => 
+    (order.items || []).map(item => ({ ...item, parentOrder: order }))
+  );
+
+  if (itemIndex !== undefined) {
+    // Si un index d'article est fourni, trouver l'article et retourner sa commande parente
+    if (itemIndex >= 0 && itemIndex < allItems.length) {
+      return allItems[itemIndex].parentOrder;
+    } else {
+      return null; // Index hors limites
     }
-  });
-  
+  }
+
+  // Si aucun index n'est fourni, retourner l'objet agrégé pour l'affichage
   return {
-    orderId,
+    orderId: tableOrders[0].orderId,
     table: State.selectedTable,
     items: allItems
   };

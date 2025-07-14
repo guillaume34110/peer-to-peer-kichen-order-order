@@ -83,36 +83,14 @@ export const validateImageBase64 = (imageData) => {
   }
 };
 
-// --- LocalStorage Helpers ---
-
 /**
- * Sauvegarde une valeur dans le localStorage après l'avoir convertie en JSON.
- * @param {string} key - La clé sous laquelle sauvegarder les données.
- * @param {*} value - La valeur à sauvegarder.
+ * Compare deux tableaux pour vérifier s'ils sont identiques.
+ * @returns {boolean} True si les tableaux sont identiques, sinon false.
  */
-export const setItemInLocalStorage = (key, value) => {
-  try {
-    const serializedValue = JSON.stringify(value);
-    localStorage.setItem(key, serializedValue);
-  } catch (error) {
-    console.error(`❌ Erreur lors de la sauvegarde de "${key}" dans le localStorage:`, error);
-  }
-};
-
-/**
- * Récupère une valeur depuis le localStorage et la parse depuis JSON.
- * @param {string} key - La clé à récupérer.
- * @returns {*} La valeur désérialisée, ou null si la clé n'existe pas ou en cas d'erreur.
- */
-export const getItemFromLocalStorage = (key) => {
-  try {
-    const serializedValue = localStorage.getItem(key);
-    if (serializedValue === null) {
-      return null;
+export const areArraysEqual = (arr1, arr2) => {
+    if (arr1.length !== arr2.length) return false;
+    for (let i = 0; i < arr1.length; i++) {
+        if (arr1[i] !== arr2[i]) return false;
     }
-    return JSON.parse(serializedValue);
-  } catch (error) {
-    console.error(`❌ Erreur lors de la lecture de "${key}" depuis le localStorage:`, error);
-    return null;
-  }
+    return true;
 }; 

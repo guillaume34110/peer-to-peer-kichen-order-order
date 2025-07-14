@@ -23,7 +23,8 @@
     "add": "Ajouter",
     "save": "Enregistrer",
     "cancelMod": "Annuler",
-    "selectIngredient": "Sélectionner un ingrédient..."
+    "selectIngredient": "Sélectionner un ingrédient...",
+    "noCategoryItems": "Aucun article dans cette catégorie"
   },
   "th": {
     "addItem": "เพิ่มรายการ",
@@ -49,6 +50,7 @@
     "add": "เพิ่ม",
     "save": "บันทึก",
     "cancelMod": "ยกเลิก",
-    "selectIngredient": "เลือกส่วนผสม..."
+    "selectIngredient": "เลือกส่วนผสม...",
+    "noCategoryItems": "ไม่มีรายการในหมวดหมู่นี้"
   }
 } 
